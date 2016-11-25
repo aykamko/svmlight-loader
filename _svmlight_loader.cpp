@@ -59,14 +59,14 @@ static void destroy_vector_owner(PyObject *self)
 
 /*
  * Since a template function can't have C linkage,
- * we instantiate the template for the types "int" and "double"
+ * we instantiate the template for the types "uint64_t" and "double"
  * in the following two functions. These are used for the tp_dealloc
  * attribute of the vector owner types further below.
  */
 extern "C" {
-static void destroy_int_vector(PyObject *self)
+static void destroy_uint64_t_vector(PyObject *self)
 {
-  destroy_vector_owner<int>(self);
+  destroy_vector_owner<uint64_t>(self);
 }
 
 static void destroy_double_vector(PyObject *self)
@@ -92,16 +92,16 @@ static void init_type_objs()
   IntVOwnerType.tp_doc   = DoubleVOwnerType.tp_doc   = "deallocator object";
   IntVOwnerType.tp_new   = DoubleVOwnerType.tp_new   = PyType_GenericNew;
 
-  IntVOwnerType.tp_basicsize     = sizeof(VectorOwner<int>);
+  IntVOwnerType.tp_basicsize     = sizeof(VectorOwner<uint64_t>);
   DoubleVOwnerType.tp_basicsize  = sizeof(VectorOwner<double>);
-  IntVOwnerType.tp_dealloc       = destroy_int_vector;
+  IntVOwnerType.tp_dealloc       = destroy_uint64_t_vector;
   DoubleVOwnerType.tp_dealloc    = destroy_double_vector;
 }
 
 PyTypeObject &vector_owner_type(int typenum)
 {
   switch (typenum) {
-    case NPY_INT: return IntVOwnerType;
+    case NPY_UINT64: return IntVOwnerType;
     case NPY_DOUBLE: return DoubleVOwnerType;
   }
   throw std::logic_error("invalid argument to vector_owner_type");
@@ -148,8 +148,8 @@ static PyObject *to_1d_array(std::vector<T> &v, int typenum)
 
 
 static PyObject *to_csr(std::vector<double> &data,
-                        std::vector<int> &indices,
-                        std::vector<int> &indptr,
+                        std::vector<uint64_t> &indices,
+                        std::vector<uint64_t> &indptr,
                         std::vector<double> &labels)
 {
   // We could do with a smart pointer to Python objects here.
@@ -162,8 +162,8 @@ static PyObject *to_csr(std::vector<double> &data,
 
   try {
     data_arr    = to_1d_array(data, NPY_DOUBLE);
-    indices_arr = to_1d_array(indices, NPY_INT);
-    indptr_arr  = to_1d_array(indptr, NPY_INT);
+    indices_arr = to_1d_array(indices, NPY_UINT64);
+    indptr_arr  = to_1d_array(indptr, NPY_UINT64);
     labels_arr  = to_1d_array(labels, NPY_DOUBLE);
 
     ret_tuple = Py_BuildValue("OOOO",
@@ -205,8 +205,8 @@ public:
  */
 void parse_line(const std::string& line,
                 std::vector<double> &data,
-                std::vector<int> &indices,
-                std::vector<int> &indptr,
+                std::vector<uint64_t> &indices,
+                std::vector<uint64_t> &indptr,
                 std::vector<double> &labels)
 {
   if (line.length() == 0)
@@ -230,12 +230,12 @@ void parse_line(const std::string& line,
 
   char c;
   double x;
-  unsigned idx;
+  uint64_t idx;
 
   while (in >> idx >> c >> x) {
     if (c != ':')
       throw SyntaxError(std::string("expected ':', got '") + c + "'");
-    indices.push_back(int(idx));
+    indices.push_back(uint64_t(idx));
     data.push_back(x);
   }
 }
@@ -246,8 +246,8 @@ void parse_line(const std::string& line,
 void parse_file(char const *file_path,
                 size_t buffer_size,
                 std::vector<double> &data,
-                std::vector<int> &indices,
-                std::vector<int> &indptr,
+                std::vector<uint64_t> &indices,
+                std::vector<uint64_t> &indptr,
                 std::vector<double> &labels)
 {
   std::vector<char> buffer(buffer_size);
@@ -285,7 +285,7 @@ static PyObject *load_svmlight_file(PyObject *self, PyObject *args)
     size_t buffer_size = buffer_mb * 1024 * 1024;
 
     std::vector<double> data, labels;
-    std::vector<int> indices, indptr;
+    std::vector<uint64_t> indices, indptr;
     parse_file(file_path, buffer_size, data, indices, indptr, labels);
 
     return to_csr(data, indices, indptr, labels);
@@ -332,17 +332,17 @@ static PyObject *dump_svmlight_file(PyObject *self, PyObject *args)
 
     int n_samples = indptr_array->dimensions[0] - 1;
     double *data = (double*) data_array->data;
-    int *indices = (int*) indices_array->data;
-    int *indptr = (int*) indptr_array->data;
+    uint64_t *indices = (uint64_t*) indices_array->data;
+    uint64_t *indptr = (uint64_t*) indptr_array->data;
     double *y = (double*) label_array->data;
 
     std::ofstream fout;
     fout.open(file_path, std::ofstream::out);
 
-    int idx;
-    for (int i=0; i < n_samples; i++) {
+    uint64_t idx;
+    for (uint64_t i=0; i < n_samples; i++) {
       fout << y[i] << " ";
-      for (int jj=indptr[i]; jj < indptr[i+1]; jj++) {
+      for (uint64_t jj=indptr[i]; jj < indptr[i+1]; jj++) {
         idx = indices[jj];
         if (!zero_based)
           idx++;
